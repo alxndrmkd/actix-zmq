@@ -3,15 +3,13 @@
 use proc_macro::TokenStream;
 use proc_macro2::{Ident, Span};
 use quote::quote;
-use std::borrow::BorrowMut;
 use syn::{
-    Data, DataStruct, DeriveInput, GenericArgument, GenericParam, Generics, PathArguments, TraitBound, Type, TypeParam,
-    TypeParamBound, TypePath,
+    Data, DataStruct, DeriveInput, GenericArgument, GenericParam, Generics, PathArguments, Type, TypeParam, TypePath,
 };
 
 #[proc_macro_derive(ActorContextStuff)]
 pub fn derive_actor_context(input: TokenStream) -> TokenStream {
-    let mut ast = syn::parse_macro_input!(input as DeriveInput);
+    let ast = syn::parse_macro_input!(input as DeriveInput);
 
     let name = &ast.ident;
     let (actor_type, parts) = get_parts_field_and_param(&ast);
@@ -20,10 +18,10 @@ pub fn derive_actor_context(input: TokenStream) -> TokenStream {
 }
 
 fn expand(name: &syn::Ident, parts: &Ident, actor_type: &Type, generics: &Generics) -> TokenStream {
-    let actor_context = expand_actor_context(name, parts, actor_type, generics);
+    let actor_context = expand_actor_context(name, parts, generics);
     let async_context = expand_async_context(name, parts, actor_type, generics);
     let context_parts = expand_async_context_parts(name, parts, actor_type, generics);
-    let to_envelope = expand_to_envelope(name, parts, actor_type, generics);
+    let to_envelope = expand_to_envelope(name, actor_type, generics);
 
     let mut gen = TokenStream::default();
     gen.extend(vec![actor_context, async_context, context_parts, to_envelope]);
@@ -31,7 +29,7 @@ fn expand(name: &syn::Ident, parts: &Ident, actor_type: &Type, generics: &Generi
     gen
 }
 
-fn expand_actor_context(name: &syn::Ident, parts: &Ident, actor_type: &Type, generics: &Generics) -> TokenStream {
+fn expand_actor_context(name: &syn::Ident, parts: &Ident, generics: &Generics) -> TokenStream {
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
 
     let gen = quote! {
@@ -83,7 +81,7 @@ fn expand_async_context_parts(name: &syn::Ident, parts: &Ident, actor_type: &Typ
     gen.into()
 }
 
-fn expand_to_envelope(name: &syn::Ident, parts: &Ident, actor_type: &Type, generics: &Generics) -> TokenStream {
+fn expand_to_envelope(name: &syn::Ident, actor_type: &Type, generics: &Generics) -> TokenStream {
     let mut message_param = TypeParam::from(Ident::new("ACTIX_MESSAGE", Span::call_site()));
     message_param.bounds.push(syn::parse_quote!(::actix::Message));
     message_param.bounds.push(syn::parse_quote!(Send));

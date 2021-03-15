@@ -1,6 +1,6 @@
 pub use actors::*;
 pub use message::*;
-pub use socket::{read::ZmqStreamHandler, SocketFd};
+pub use socket::{read::ReadHandler, SocketFd};
 
 mod actors;
 mod message;

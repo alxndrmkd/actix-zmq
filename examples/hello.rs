@@ -1,6 +1,6 @@
-use actix::{fut::wrap_future, io::WriteHandler, Actor, ActorFutureExt, AsyncContext, Running};
+use actix::{fut::wrap_future, io::WriteHandler, Actor, ActorFutureExt, AsyncContext, Running, StreamHandler};
 use actix_zmq::{
-    SocketFd, ZmqMessage, ZmqReqActor, ZmqReqActorContext, ZmqRouterActor, ZmqRouterActorContext, ZmqStreamHandler,
+    ReadHandler, SocketFd, ZmqAsyncActor, ZmqAsyncActorContext, ZmqMessage, ZmqReqActor, ZmqReqActorContext,
 };
 use std::{io, io::Error, time::Duration};
 use zmq::{Context as ZmqContext, REQ, ROUTER};
@@ -14,10 +14,10 @@ fn main() -> Result<(), io::Error> {
         let srv = SocketFd::bind(&ctx, ROUTER, ENDPOINT).expect("can't bind server socket");
         let cli = SocketFd::connect(&ctx, REQ, ENDPOINT).expect("can't connect client socket");
 
-        EchoServer.start_router_actor(srv);
+        EchoServer.start_async_actor(srv);
         Client.start_req_actor(cli);
 
-        tokio::signal::ctrl_c().await;
+        tokio::signal::ctrl_c().await.unwrap();
     })
 }
 
@@ -28,7 +28,7 @@ fn main() -> Result<(), io::Error> {
 pub struct EchoServer;
 
 impl Actor for EchoServer {
-    type Context = ZmqRouterActorContext<Self>;
+    type Context = ZmqAsyncActorContext<Self>;
 
     fn started(&mut self, _: &mut Self::Context) {
         println!("SRV: started")
@@ -42,8 +42,8 @@ impl WriteHandler<io::Error> for EchoServer {
     }
 }
 
-impl ZmqStreamHandler for EchoServer {
-    fn handle_message(&mut self, mut message: ZmqMessage, ctx: &mut ZmqRouterActorContext<Self>) {
+impl StreamHandler<ZmqMessage> for EchoServer {
+    fn handle(&mut self, mut message: ZmqMessage, ctx: &mut ZmqAsyncActorContext<Self>) {
         if message.len() != 3 {
             eprintln!("unexpected message len");
             return;
@@ -62,8 +62,10 @@ impl ZmqStreamHandler for EchoServer {
 
         ctx.send(reply);
     }
+}
 
-    fn handle_error(&mut self, err: Error, _: &mut ZmqRouterActorContext<Self>) -> Running {
+impl ReadHandler<io::Error> for EchoServer {
+    fn error(&mut self, err: Error, _: &mut ZmqAsyncActorContext<Self>) -> Running {
         eprintln!("SRV: read error - {}", err);
         Running::Continue
     }

@@ -33,6 +33,9 @@ pub struct ZmqReqActorContext<A: Actor<Context = Self>> {
     socket: SocketRw,
 }
 
+// TODO:
+//  - [ ] connect(endpoint)
+//  - [ ] disconnect(endpoint)
 impl<A: Actor<Context = Self>> ZmqReqActorContext<A> {
     pub fn make_request(&mut self, request: ZmqMessage) -> impl Future<Output = io::Result<ZmqMessage>> {
         let send_request = self.socket.write(0, request);

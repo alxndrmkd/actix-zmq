@@ -2,16 +2,22 @@ use std::rc::Rc;
 
 use actix::{
     dev::{ContextFut, ContextParts, Mailbox},
-    Actor, Addr, AsyncContext,
+    Actor, Addr, AsyncContext, StreamHandler,
 };
 use actix_zmq_derive::ActorContextStuff;
 
-use crate::socket::{
-    read::{ZmqSocketStream, ZmqStreamHandler},
-    SocketFd,
+use crate::{
+    socket::{
+        read::{ReadHandler, ZmqSocketStream},
+        SocketFd,
+    },
+    ZmqMessage,
 };
+use std::io;
 
-pub trait ZmqSubActor: Actor<Context = ZmqSubActorContext<Self>> + ZmqStreamHandler {
+pub trait ZmqSubActor:
+    Actor<Context = ZmqSubActorContext<Self>> + StreamHandler<ZmqMessage> + ReadHandler<io::Error>
+{
     fn start_sub_actor(self, fd: SocketFd) -> Addr<Self> {
         let mb = Mailbox::default();
         let parts = ContextParts::new(mb.sender_producer());
@@ -29,6 +35,12 @@ pub trait ZmqSubActor: Actor<Context = ZmqSubActorContext<Self>> + ZmqStreamHand
         addr
     }
 }
+
+// TODO:
+//  - [ ] connect(endpoint)
+//  - [ ] disconnect(endpoint)
+//  - [ ] subscribe(topic)
+//  - [ ] unsubscribe(topic)
 
 #[derive(ActorContextStuff)]
 pub struct ZmqSubActorContext<A: Actor<Context = Self>> {

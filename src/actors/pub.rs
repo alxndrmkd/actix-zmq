@@ -36,6 +36,9 @@ pub struct ZmqPubActorContext<A: Actor<Context = Self>> {
     sink:  ZmqSocketSink,
 }
 
+// TODO:
+//  - [ ] connect(endpoint)
+//  - [ ] disconnect(endpoint)
 impl<A: Actor<Context = Self>> ZmqPubActorContext<A> {
     pub fn publish(&mut self, message: ZmqMessage) {
         self.sink.write(message);

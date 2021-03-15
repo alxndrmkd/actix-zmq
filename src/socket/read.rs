@@ -1,5 +1,5 @@
 use crate::{message::ZmqMessage, socket::SocketFd};
-use actix::{Actor, ActorContext, ActorFuture, AsyncContext, Running};
+use actix::{Actor, ActorContext, ActorFuture, AsyncContext, Running, StreamHandler};
 use bytes::BytesMut;
 use futures::Stream;
 use std::{
@@ -11,16 +11,14 @@ use std::{
 };
 use zmq::Message;
 
-pub trait ZmqStreamHandler
+pub trait ReadHandler<E>
 where
     Self: Actor,
     Self::Context: ActorContext,
 {
-    fn handle_message(&mut self, item: ZmqMessage, ctx: &mut Self::Context);
-    fn handle_error(&mut self, _: io::Error, _: &mut Self::Context) -> Running {
+    fn error(&mut self, _: E, _: &mut Self::Context) -> Running {
         Running::Stop
     }
-    fn started(&mut self, _: &mut Self::Context) {}
     fn finished(&mut self, ctx: &mut Self::Context) {
         ctx.stop()
     }
@@ -75,7 +73,7 @@ impl ZmqSocketStream {
 
 impl<A> ActorFuture<A> for ZmqSocketStream
 where
-    A: Actor + ZmqStreamHandler,
+    A: Actor + StreamHandler<ZmqMessage> + ReadHandler<io::Error>,
     A::Context: ActorContext + AsyncContext<A>,
 {
     type Output = ();
@@ -85,21 +83,21 @@ where
 
         if !*started {
             *started = true;
-            <A as ZmqStreamHandler>::started(act, ctx);
+            <A as StreamHandler<ZmqMessage>>::started(act, ctx);
         }
 
         match Pin::new(read).poll_next(cx) {
-            Poll::Ready(Some(Ok(v))) => <A as ZmqStreamHandler>::handle_message(act, v, ctx),
+            Poll::Ready(Some(Ok(v))) => <A as StreamHandler<ZmqMessage>>::handle(act, v, ctx),
 
             Poll::Ready(Some(Err(err))) => {
-                if let Running::Stop = <A as ZmqStreamHandler>::handle_error(act, err, ctx) {
+                if let Running::Stop = <A as ReadHandler<io::Error>>::error(act, err, ctx) {
                     act.stopped(ctx);
                     return Poll::Ready(());
                 }
             },
 
             Poll::Ready(None) => {
-                <A as ZmqStreamHandler>::finished(act, ctx);
+                <A as StreamHandler<ZmqMessage>>::finished(act, ctx);
                 return Poll::Ready(());
             },
             _ => {},
