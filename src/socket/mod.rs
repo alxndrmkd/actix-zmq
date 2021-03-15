@@ -18,6 +18,7 @@ use crate::{
         write::{ZmqSocketSink, ZmqSocketSinkFuture, ZmqSocketWrite},
     },
 };
+use std::ops::{Deref, DerefMut};
 
 pub struct SocketFd(Socket, AsyncFd<RawFd>);
 
@@ -136,6 +137,20 @@ impl SocketFd {
 
             Poll::Pending
         }
+    }
+}
+
+impl Deref for SocketFd {
+    type Target = Socket;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for SocketFd {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
     }
 }
 

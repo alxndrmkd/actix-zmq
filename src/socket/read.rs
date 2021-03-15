@@ -69,6 +69,10 @@ impl ZmqSocketStream {
         let read = ZmqSocketRead::new(fd, Message::new(), BytesMut::new(), 0);
         Self(read, false)
     }
+
+    pub fn with_token<T>(self, token: T) -> ZmqSocketTokenizedStream<T> {
+        ZmqSocketTokenizedStream(token, self)
+    }
 }
 
 impl<A> ActorFuture<A> for ZmqSocketStream
@@ -98,6 +102,49 @@ where
 
             Poll::Ready(None) => {
                 <A as StreamHandler<ZmqMessage>>::finished(act, ctx);
+                return Poll::Ready(());
+            },
+            _ => {},
+        };
+
+        if !ctx.waiting() {
+            cx.waker().wake_by_ref()
+        }
+
+        Poll::Pending
+    }
+}
+
+pub struct ZmqSocketTokenizedStream<T>(T, ZmqSocketStream);
+
+impl<A, T> ActorFuture<A> for ZmqSocketTokenizedStream<T>
+where
+    T: Unpin + Copy,
+    A: Actor + StreamHandler<(T, ZmqMessage)> + ReadHandler<(T, io::Error)>,
+    A::Context: ActorContext + AsyncContext<A>,
+{
+    type Output = ();
+
+    fn poll(self: Pin<&mut Self>, act: &mut A, ctx: &mut A::Context, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let ZmqSocketTokenizedStream(tok, ZmqSocketStream(read, started)) = self.get_mut();
+
+        if !*started {
+            *started = true;
+            <A as StreamHandler<(T, ZmqMessage)>>::started(act, ctx);
+        }
+
+        match Pin::new(read).poll_next(cx) {
+            Poll::Ready(Some(Ok(v))) => <A as StreamHandler<(T, ZmqMessage)>>::handle(act, (*tok, v), ctx),
+
+            Poll::Ready(Some(Err(err))) => {
+                if let Running::Stop = <A as ReadHandler<(T, io::Error)>>::error(act, (*tok, err), ctx) {
+                    act.stopped(ctx);
+                    return Poll::Ready(());
+                }
+            },
+
+            Poll::Ready(None) => {
+                <A as StreamHandler<(T, ZmqMessage)>>::finished(act, ctx);
                 return Poll::Ready(());
             },
             _ => {},
